@@ -1,5 +1,8 @@
 # Terraform Google GCP GitHub Workload Identity Federation Module
 
+> [!NOTE]  
+  > This is a stripped-down fork of the original [terraform-google-gcp-github-wif](https://github.com/sparkfabrik/terraform-google-gcp-github-wif) module. We removed some features and simplified the configuration for easier usage and maintenance.
+
 This Terraform module sets up **Google Cloud Platform (GCP) Workload Identity Federation (WIF)** to allow GitHub Actions workflows to authenticate with GCP without using static service account keys.
 
 ## Features
@@ -16,7 +19,7 @@ This Terraform module sets up **Google Cloud Platform (GCP) Workload Identity Fe
 
 ```hcl
 module "github_wif" {
-  source = "github.com/sparkfabrik/terraform-google-gcp-github-wif"
+  source = "github.com/seatling/terraform-google-gcp-github-wif"
 
   name                   = "my-github-wif"
   gcp_project_id         = "my-gcp-project-id"
@@ -30,7 +33,7 @@ module "github_wif" {
 
 ```hcl
 module "github_wif" {
-  source = "github.com/sparkfabrik/terraform-google-gcp-github-wif"
+  source = "github.com/seatling/terraform-google-gcp-github-wif"
 
   name                   = "prod-deploy"
   gcp_project_id         = "my-gcp-project-id"
@@ -100,54 +103,7 @@ This module maps the following GitHub OIDC token claims to GCP attributes:
 | `environment`           | `attribute.environment`           | Deployment environment name              |
 | `runner_environment`    | `attribute.runner_environment`    | github-hosted or self-hosted             |
 
-## Requirements
-
-| Name      | Version |
-| --------- | ------- |
-| terraform | >= 1.5  |
-| google    | >= 3.53 |
-| random    | >= 3.0  |
-| github    | >= 5.0  |
-
-## Providers
-
-| Name   | Version |
-| ------ | ------- |
-| google | >= 3.53 |
-| random | >= 3.0  |
-| github | >= 5.0  |
-
-## Inputs
-
-| Name                                                  | Description                                                                                               | Type           | Default                                         | Required |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | -------------- | ----------------------------------------------- | :------: |
-| name                                                  | The name to use for all resources created by this module                                                  | `string`       | n/a                                             |   yes    |
-| gcp_project_id                                        | The ID of the project in which to provision resources                                                     | `string`       | n/a                                             |   yes    |
-| gcp_service_account_id                                | The account ID, email, or unique ID of the target GCP service account                                      | `string`       | n/a                                             |   yes    |
-| github_repository_names                               | The GitHub repository names (in format 'owner/repo') to allow access from                                  | `list(string)` | n/a                                             |   yes    |
-| gcp_workload_identity_pool_provider_attribute_mapping | A map of attribute mappings for the GCP Workload Identity Federation provider                             | `map(string)`  | See variables.tf                                |    no    |
-| github_token_issuer_url                               | The URL of the GitHub OIDC token issuer                                                                   | `string`       | `"https://token.actions.githubusercontent.com"` |    no    |
-| github_gcp_wif_project_id_variable_name               | The name of the GitHub Actions variable to store the GCP project ID for WIF                               | `string`       | `"GCP_WIF_PROJECT_ID"`                          |    no    |
-| github_gcp_wif_service_account_email_variable_name      | The name of the GitHub Actions variable to store the GCP WIF service account email                        | `string`       | `"GCP_WIF_SERVICE_ACCOUNT_EMAIL"`               |    no    |
-| github_gcp_wif_workload_identity_provider_variable_name | The name of the GitHub Actions variable to store the full workload identity provider path                  | `string`       | `"GCP_WORKLOAD_IDENTITY_PROVIDER"`              |    no    |
-| github_create_oidc_variables                          | Whether to create GitHub Actions variables for the WIF configuration                                      | `bool`         | `true`                                          |    no    |
-| github_variables_additional                           | Additional GitHub Actions variables to create                                                             | `map(string)`  | `{}`                                            |    no    |
-| github_attribute_condition_additional                 | Additional CEL expression to AND with the generated attribute condition                                   | `string`       | `null`                                          |    no    |
-
-## Outputs
-
-| Name                               | Description                                                                                         |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------- |
-| workload_identity_pool_name        | Full name of the Workload Identity Pool                                                             |
-| workload_identity_pool_id          | ID of the Workload Identity Pool                                                                    |
-| workload_identity_pool_provider_id | ID of the Workload Identity Provider                                                                |
-| workload_identity_provider         | Full resource path for google-github-actions/auth                                                   |
-| service_account_email              | Email of the Service Account                                                                        |
-| principal_set                      | Principal sets for IAM bindings                                                                     |
-| attribute_condition                | The attribute condition used                                                                        |
-| github_actions_variables           | Map of GitHub Actions variables created                                                             |
-
-## Validation and Guardrails
+  ## Validation and Guardrails
 
 - Repository mode constraints:
   - At least one repository must be specified in `github_repository_names`.
@@ -175,10 +131,13 @@ github_attribute_condition_additional = "attribute.environment==\"production\""
 
 # Only github-hosted runners
 github_attribute_condition_additional = "attribute.runner_environment==\"github-hosted\""
+```
 
-# Combined conditions
+## Combined conditions
+```hcl
 github_attribute_condition_additional = "attribute.ref==\"refs/heads/main\" && attribute.environment==\"production\""
 ```
+
 
 ## License
 
