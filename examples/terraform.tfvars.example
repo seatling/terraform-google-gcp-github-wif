@@ -1,4 +1,0 @@
-gcp_project_id      = "my-gcp-project-id"
-github_organization = "my-org"
-github_repositories = ["my-org/my-repo", "my-org/another-repo"]
-secret_names        = ["api-key", "database-password"]
