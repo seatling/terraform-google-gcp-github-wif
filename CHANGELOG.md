@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Support multiple existing service accounts on one Workload Identity Federation configuration via `gcp_service_account_ids`.
+- Publish each service account email as a GitHub Actions variable, plus a comma-separated `GCP_WIF_SERVICE_ACCOUNT_EMAILS` variable.
+
+### Changed
+
+- Replace `gcp_service_account_id` with required `gcp_service_account_ids`. One Workload Identity user binding is created for each service account and repository.
+
 ## 0.1.0 (2026-10-07)
 
 

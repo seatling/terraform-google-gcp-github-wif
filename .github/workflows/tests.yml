@@ -1,0 +1,27 @@
+name: tests
+
+on: [push]
+
+permissions: read-all
+
+jobs:
+  tftest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+        name: Checkout source code
+
+      - uses: hashicorp/setup-terraform@v4
+
+      - name: Show version
+        run: terraform --version
+
+      - name: Run Terraform Init
+        run: terraform init -input=false -backend=false
+
+      - name: Run Terraform Validate
+        run: terraform validate -no-color
+
+      - name: Run Terraform Test
+        run: terraform test -no-color

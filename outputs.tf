@@ -20,8 +20,13 @@ output "workload_identity_provider" {
 }
 
 output "service_account_email" {
-  description = "The email of the Service Account used."
+  description = "The email of the service account when exactly one is configured. Null when multiple service accounts are configured; use service_account_emails instead."
   value       = local.sa_email
+}
+
+output "service_account_emails" {
+  description = "Map of configured service account identifier to the service account email."
+  value       = local.sa_emails
 }
 
 output "principal_set" {
@@ -37,9 +42,15 @@ output "attribute_condition" {
 # GitHub Actions variables outputs
 output "github_actions_variables" {
   description = "The GitHub Actions variables created by this module."
-  value = {
-    (var.github_gcp_wif_project_id_variable_name)                 = data.google_project.project.project_id,
-    (var.github_gcp_wif_service_account_email_variable_name)      = local.sa_email
-    (var.github_gcp_wif_workload_identity_provider_variable_name) = local.workload_identity_provider
-  }
+  value = merge(
+    {
+      (var.github_gcp_wif_project_id_variable_name)                 = data.google_project.project.project_id
+      (var.github_gcp_wif_workload_identity_provider_variable_name) = local.workload_identity_provider
+      (var.github_gcp_wif_service_account_emails_variable_name)     = join(",", local.sa_email_list)
+    },
+    {
+      for id, variable_name in local.service_account_email_variable_names :
+      variable_name => local.sa_emails[id]
+    }
+  )
 }

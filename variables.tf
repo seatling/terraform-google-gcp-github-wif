@@ -14,9 +14,24 @@ variable "gcp_project_id" {
   type        = string
 }
 
-variable "gcp_service_account_id" {
-  description = "The account ID, email, or unique ID of the target GCP service account to allow GitHub Actions to impersonate via Workload Identity."
-  type        = string
+variable "gcp_service_account_ids" {
+  description = "Account IDs, emails, or unique IDs of the target GCP service accounts that GitHub Actions may impersonate via this Workload Identity Federation configuration. Every configured repository can impersonate every listed service account."
+  type        = list(string)
+
+  validation {
+    condition     = length(var.gcp_service_account_ids) > 0
+    error_message = "At least one service account must be specified in gcp_service_account_ids."
+  }
+
+  validation {
+    condition     = alltrue([for id in var.gcp_service_account_ids : trimspace(id) != "" && id == trimspace(id)])
+    error_message = "gcp_service_account_ids must not contain empty identifiers or identifiers with leading or trailing spaces."
+  }
+
+  validation {
+    condition     = length(distinct(var.gcp_service_account_ids)) == length(var.gcp_service_account_ids)
+    error_message = "gcp_service_account_ids must not contain duplicates."
+  }
 }
 
 variable "gcp_workload_identity_pool_provider_attribute_mapping" {
@@ -92,9 +107,44 @@ variable "github_gcp_wif_project_id_variable_name" {
 }
 
 variable "github_gcp_wif_service_account_email_variable_name" {
-  description = "The name of the GitHub Actions variable to store the GCP WIF service account email."
+  description = "The name of the GitHub Actions variable to store the GCP WIF service account email when exactly one service account is configured and github_gcp_wif_service_account_email_variable_names is empty."
   type        = string
   default     = "GCP_WIF_SERVICE_ACCOUNT_EMAIL"
+
+  validation {
+    condition     = can(regex("^[A-Za-z_][A-Za-z0-9_]*$", var.github_gcp_wif_service_account_email_variable_name)) && !startswith(upper(var.github_gcp_wif_service_account_email_variable_name), "GITHUB_")
+    error_message = "github_gcp_wif_service_account_email_variable_name must be a valid GitHub Actions variable name and must not start with GITHUB_."
+  }
+}
+
+variable "github_gcp_wif_service_account_emails_variable_name" {
+  description = "The name of the GitHub Actions variable that stores a comma-separated list of service account emails allowed by this Workload Identity Federation configuration."
+  type        = string
+  default     = "GCP_WIF_SERVICE_ACCOUNT_EMAILS"
+
+  validation {
+    condition     = can(regex("^[A-Za-z_][A-Za-z0-9_]*$", var.github_gcp_wif_service_account_emails_variable_name)) && !startswith(upper(var.github_gcp_wif_service_account_emails_variable_name), "GITHUB_")
+    error_message = "github_gcp_wif_service_account_emails_variable_name must be a valid GitHub Actions variable name and must not start with GITHUB_."
+  }
+}
+
+variable "github_gcp_wif_service_account_email_variable_names" {
+  description = "Optional map of service account identifier to GitHub Actions variable name. Keys must exactly match values in gcp_service_account_ids. Unlisted service accounts use GCP_WIF_SA_<ACCOUNT_ID> when more than one service account is configured. With one service account and an empty map, github_gcp_wif_service_account_email_variable_name is used instead."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition = alltrue([
+      for name in values(var.github_gcp_wif_service_account_email_variable_names) :
+      can(regex("^[A-Za-z_][A-Za-z0-9_]*$", name)) && !startswith(upper(name), "GITHUB_")
+    ])
+    error_message = "github_gcp_wif_service_account_email_variable_names values must be valid GitHub Actions variable names and must not start with GITHUB_."
+  }
+
+  validation {
+    condition     = length(distinct([for name in values(var.github_gcp_wif_service_account_email_variable_names) : upper(name)])) == length(var.github_gcp_wif_service_account_email_variable_names)
+    error_message = "github_gcp_wif_service_account_email_variable_names values must be unique. GitHub Actions variable names are case-insensitive."
+  }
 }
 
 variable "github_gcp_wif_workload_identity_provider_variable_name" {

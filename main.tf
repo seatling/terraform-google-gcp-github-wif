@@ -30,14 +30,58 @@ resource "google_iam_workload_identity_pool_provider" "this" {
 }
 
 data "google_service_account" "this" {
-  account_id = var.gcp_service_account_id
+  for_each = toset(local.service_account_ids)
+
+  account_id = each.value
   project    = var.gcp_project_id
+
+  lifecycle {
+    postcondition {
+      condition     = self.email != "" && self.name != ""
+      error_message = "Service account ${each.key} must already exist in project ${var.gcp_project_id} and expose an email and resource name."
+    }
+  }
+}
+
+# Fail before creating federation resources when the service account list or
+# GitHub variable names are ambiguous. Variable validation cannot reference other variables.
+resource "terraform_data" "service_account_guards" {
+  input = local.service_account_ids
+
+  lifecycle {
+    precondition {
+      condition     = length(distinct([for sa in data.google_service_account.this : sa.email])) == length(data.google_service_account.this)
+      error_message = "gcp_service_account_ids must resolve to distinct service accounts."
+    }
+
+    precondition {
+      condition     = length(local.unknown_service_account_variable_keys) == 0
+      error_message = "github_gcp_wif_service_account_email_variable_names keys must match configured service account identifiers: ${join(", ", local.unknown_service_account_variable_keys)}."
+    }
+
+    precondition {
+      condition     = length(local.invalid_service_account_variable_names) == 0
+      error_message = "Could not derive a valid GitHub Actions variable name for: ${join(", ", keys(local.invalid_service_account_variable_names))}. Set github_gcp_wif_service_account_email_variable_names for those identifiers."
+    }
+
+    precondition {
+      condition     = length(local.duplicate_service_account_variable_names) == 0
+      error_message = "Service account GitHub Actions variable names must be unique (names are case-insensitive): ${join(", ", local.duplicate_service_account_variable_names)}."
+    }
+
+    precondition {
+      condition     = length(local.conflicting_service_account_variable_names) == 0 && local.core_github_variable_names_are_unique
+      error_message = "Service account GitHub Actions variable names collide with project, provider, emails-list, or additional variable names: ${join(", ", local.conflicting_service_account_variable_names)}."
+    }
+  }
 }
 
 resource "google_service_account_iam_member" "this" {
-  for_each = local.principal_sets
+  for_each = local.workload_identity_user_bindings
 
-  service_account_id = data.google_service_account.this.name
+  service_account_id = each.value.service_account_id
   role               = "roles/iam.workloadIdentityUser"
-  member             = each.value
+  member             = each.value.member
+
+  depends_on = [terraform_data.service_account_guards]
 }

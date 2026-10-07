@@ -9,7 +9,7 @@ This Terraform module sets up **Google Cloud Platform (GCP) Workload Identity Fe
 
 - Creates a Workload Identity Pool and OIDC Provider for GitHub Actions
 - Restricts access to selected GitHub repositories using secure attribute conditions
-- Binds Workload Identity users to an existing target GCP Service Account
+- Binds Workload Identity users to one or more existing target GCP service accounts
 - Automatically creates repository-level GitHub Actions variables with WIF configuration
 - Flexible attribute conditions for fine-grained access control (e.g., branch, environment)
 
@@ -21,12 +21,50 @@ This Terraform module sets up **Google Cloud Platform (GCP) Workload Identity Fe
 module "github_wif" {
   source = "github.com/seatling/terraform-google-gcp-github-wif"
 
-  name                   = "my-github-wif"
-  gcp_project_id         = "my-gcp-project-id"
-  gcp_service_account_id = "my-service-account@my-gcp-project-id.iam.gserviceaccount.com"
+  name           = "my-github-wif"
+  gcp_project_id = "my-gcp-project-id"
+
+  gcp_service_account_ids = [
+    "my-service-account@my-gcp-project-id.iam.gserviceaccount.com",
+  ]
 
   github_repository_names = ["my-org/my-repo"]
 }
+```
+
+### Multiple Service Accounts
+
+One Workload Identity pool can impersonate several existing service accounts. Every repository in `github_repository_names` can impersonate every listed service account. Use a separate module instance when repositories need different service accounts or different attribute conditions.
+
+```hcl
+module "github_wif" {
+  source = "github.com/seatling/terraform-google-gcp-github-wif"
+
+  name           = "my-github-wif"
+  gcp_project_id = "my-gcp-project-id"
+
+  gcp_service_account_ids = [
+    "deployer@my-gcp-project-id.iam.gserviceaccount.com",
+    "reader@my-gcp-project-id.iam.gserviceaccount.com",
+  ]
+
+  github_repository_names = ["my-org/my-repo"]
+
+  # Optional. Keys must match the identifiers above.
+  github_gcp_wif_service_account_email_variable_names = {
+    "deployer@my-gcp-project-id.iam.gserviceaccount.com" = "GCP_WIF_DEPLOYER_SERVICE_ACCOUNT_EMAIL"
+    "reader@my-gcp-project-id.iam.gserviceaccount.com"   = "GCP_WIF_READER_SERVICE_ACCOUNT_EMAIL"
+  }
+}
+```
+
+With more than one service account, the module does not set `GCP_WIF_SERVICE_ACCOUNT_EMAIL`. It sets `GCP_WIF_SERVICE_ACCOUNT_EMAILS` to a comma-separated list, and one variable per account. Omitted names are generated as `GCP_WIF_SA_<ACCOUNT_ID>` (`deployer@...` becomes `GCP_WIF_SA_DEPLOYER`).
+
+```yaml
+- uses: google-github-actions/auth@v2
+  with:
+    workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+    service_account: ${{ vars.GCP_WIF_DEPLOYER_SERVICE_ACCOUNT_EMAIL }}
 ```
 
 ### With Additional Security Conditions
@@ -35,9 +73,12 @@ module "github_wif" {
 module "github_wif" {
   source = "github.com/seatling/terraform-google-gcp-github-wif"
 
-  name                   = "prod-deploy"
-  gcp_project_id         = "my-gcp-project-id"
-  gcp_service_account_id = "my-service-account@my-gcp-project-id.iam.gserviceaccount.com"
+  name           = "prod-deploy"
+  gcp_project_id = "my-gcp-project-id"
+
+  gcp_service_account_ids = [
+    "my-service-account@my-gcp-project-id.iam.gserviceaccount.com",
+  ]
 
   github_repository_names = ["my-org/my-repo"]
 
@@ -103,13 +144,16 @@ This module maps the following GitHub OIDC token claims to GCP attributes:
 | `environment`           | `attribute.environment`           | Deployment environment name              |
 | `runner_environment`    | `attribute.runner_environment`    | github-hosted or self-hosted             |
 
-  ## Validation and Guardrails
+## Validation and Guardrails
 
 - Repository mode constraints:
   - At least one repository must be specified in `github_repository_names`.
   - `github_repository_names` must be in the format `owner/repo`.
   - `github_repository_names` must be unique.
   - All repositories must belong to the same owner.
+- Service account constraints:
+  - At least one identifier must be set in `gcp_service_account_ids`.
+  - Identifiers must already exist in `gcp_project_id` and must resolve to distinct service accounts.
 - Issuer constraint:
   - `github_token_issuer_url` must remain `https://token.actions.githubusercontent.com`.
 
