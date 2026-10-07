@@ -1,135 +1,51 @@
-# Terraform Google GCP GitHub WIF Module
+# AGENTS.md
 
-## Project Overview
+Guidance for AI coding agents working in this repository.
 
-Terraform module that configures Google Cloud Workload Identity Federation (WIF) for GitHub Actions, enabling keyless authentication from GitHub workflows to GCP. Supports repository-level, organization-level, and enterprise-level access with CEL-based attribute conditions.
+## Scope
 
-**Tech stack:** Terraform (HCL), GCP (Workload Identity, IAM, Secret Manager), GitHub provider. No application code — pure infrastructure module.
+- Reusable Terraform module providing Google Cloud Platform (GCP) Workload Identity Federation (WIF) for GitHub Actions.
+- Allows GitHub Actions workflows in specified repositories to authenticate against GCP using OIDC without static service account keys.
+- Binds Workload Identity users to an existing target GCP service account (`roles/iam.workloadIdentityUser`).
+- Automatically manages repository-level GitHub Actions variables for WIF configuration.
+- Scope is strictly repository-level federation for repositories under a single owner; organization-level and GitHub Enterprise federations are intentionally unsupported.
 
-## Project Context
+## Architecture Map
 
-Read [`spec/SPEC.md`](spec/SPEC.md) for module design decisions, architecture rationale, access levels, and security patterns. Use the spec as reference when making design-level changes. Update `spec/SPEC.md` when introducing new behavior or configuration that affects the module's design.
+- [main.tf](main.tf): Core resources including [random_id](main.tf#L1) suffix, GCP Workload Identity Pool ([google_iam_workload_identity_pool](main.tf#L10)), OIDC Provider ([google_iam_workload_identity_pool_provider](main.tf#L17)), and IAM member binding on the target service account ([google_service_account_iam_member](main.tf#L37)).
+- [variables.tf](variables.tf): Module inputs with strict type definitions and validation blocks (naming constraints, single-owner verification, format checks).
+- [locals.tf](locals.tf): Resource naming suffixing, display name truncation (max 32 characters), CEL attribute condition composition, and `principalSet` mapping.
+- [github.tf](github.tf): Provisioning of repository-level GitHub Actions variables ([github_actions_variable](github.tf#L5)) for project ID, service account email, and workload identity provider path.
+- [data.tf](data.tf): Dynamic GitHub repository lookups ([data.github_repository](data.tf#L1)) to retrieve immutable numeric repository IDs.
+- [outputs.tf](outputs.tf): Exported attributes including pool and provider names/IDs, full provider resource path, service account email, and variables map.
+- [versions.tf](versions.tf): Minimum Terraform version (`>= 1.5`) and required provider constraints (`google`, `random`, `github`).
 
-## Setup
+## Build, Lint, and Validation
 
-This is a Terraform module — it is not deployed standalone. Development tasks (linting, docs generation, security scanning) run via Docker through `make` targets. No local Terraform, tflint, or tfsec installation required.
+Run validation commands from the repository root:
 
-```bash
-make lint           # Run tflint via Docker
-make tfsec          # Run tfsec security scan via Docker
-make generate-docs  # Lint + regenerate README.md via terraform-docs
-```
+1. Format check: `terraform fmt -check`
+2. Linting: `tflint --init && tflint -f compact`
+3. Static security scan: `docker run -t -v ${PWD}:/tf --workdir /tf bridgecrew/checkov --directory /tf --skip-check CKV_TF_1 --quiet --compact` (mirrors [.github/workflows/lints.yml](.github/workflows/lints.yml))
 
-Running `make` without a target defaults to `lint`.
+Before finishing any Terraform changes, run `terraform fmt` and ensure `tflint` produces no warnings or errors.
 
-## Key Conventions
+## Repo-Specific Conventions & Pitfalls
 
-- All tooling runs in Docker — never install tflint, tfsec, or terraform-docs locally.
-- The `examples/` directory contains usage examples and `test.tfvars` used by the linter.
-- The `examples/test.tfvars` file must be kept in sync with `variables.tf` — if you add or remove a variable, update `test.tfvars` accordingly.
-- README.md contains auto-generated sections between `<!-- BEGIN_TF_DOCS -->` and `<!-- END_TF_DOCS -->` markers. Never edit content inside these markers manually.
+- **Repository-Level Scope Only**: Do not reintroduce organization-level access, organization variables, or GitHub Enterprise issuer logic. The module is intentionally restricted to repository-level federation.
+- **Repository ID Lookup via GitHub Provider**: Repositories are provided by `owner/repo` string in `var.github_repository_names`, but mapped internally to numeric repository IDs via [data.tf](data.tf#L1). Attribute conditions and `principalSet` bindings must always use `attribute.repository_id` rather than repository names to prevent namespace hijacking.
+- **Single Owner Constraint**: `var.github_repository_names` enforces that all repositories share the same GitHub owner.
+- **Pool and Provider ID Randomization**: Pool and provider resource IDs prefix the random hex before the name (`pool-${random_id.suffix.hex}-${var.name}`), truncated to 32 characters. This ensures the random suffix is never truncated when `var.name` is long, preventing collision issues.
+- **Display Name Length Limits**: GCP imposes a 32-character maximum on Workload Identity Pool and Provider display names. Suffixes ` Pool` and ` Provider` require truncating `var.name` via [locals.tf](locals.tf#L29-L39).
+- **Target Service Account**: The target service account must already exist; the module looks it up via `data.google_service_account` and does not provision it.
+- **Security Checkov Suppressions**: `CKV_GCP_125` is intentionally skipped on [google_iam_workload_identity_pool_provider.this](main.tf#L17) because access is restricted via CEL repository ID attribute conditions.
+- **Releases & Commits**: Follow Conventional Commits (`feat:`, `fix:`, `chore:`, etc.) for automated releases via Release Please ([.github/workflows/release.yml](.github/workflows/release.yml)).
 
-## Code Style
+## References
 
-- **Terraform (HCL):** TFLint with 9 rules enabled (`.tflint.hcl`):
-  - `terraform_naming_convention` — snake_case for all names
-  - `terraform_unused_declarations` — no unused variables/locals
-  - `terraform_typed_variables` — all variables must have types
-  - `terraform_standard_module_structure` — standard file layout (`main.tf`, `variables.tf`, `outputs.tf`)
-  - `terraform_comment_syntax` — use `#` comments, not `//`
-  - `terraform_deprecated_index` — no legacy index syntax
-  - `terraform_deprecated_interpolation` — no legacy interpolation syntax
-  - `terraform_module_pinned_source` — pin module sources
-  - `terraform_unused_required_providers` — no unused provider declarations
-- Run `make lint` before committing.
+- Module usage and examples: [README.md](README.md)
+- Release history and migration notes: [CHANGELOG.md](CHANGELOG.md)
+- Terraform coding standards: [.github/instructions/tf.instructions.md](.github/instructions/tf.instructions.md)
+- CI linting workflow: [.github/workflows/lints.yml](.github/workflows/lints.yml)
+- Release Please configuration: [.github/workflows/release.yml](.github/workflows/release.yml)
 
-## Changelog
-
-This project uses [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format with [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-**On every change**, update `CHANGELOG.md`:
-
-- Add entries under the `## [Unreleased]` section.
-- Use imperative mood (e.g., "Add support for...", "Fix validation of...").
-- Group entries by type when multiple changes are present: `Added`, `Changed`, `Fixed`, `Removed`.
-- Only create a new version section when the user explicitly asks to cut a release.
-
-## Documentation
-
-After any change to `.tf` files, run:
-
-```bash
-make generate-docs
-```
-
-This regenerates the auto-generated sections of `README.md` (providers, requirements, inputs, outputs, resources). The target depends on `lint`, so linting runs first.
-
-Always format Markdown files after creating or modifying them.
-
-## Git Workflow
-
-### Commits
-
-Follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/):
-
-```text
-<type>(<scope>): <description>
-```
-
-**Types:** `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `ci`, `perf`, `build`.
-**Scope** is optional — use the affected component (e.g., `wif`, `secrets`, `github`).
-
-Keep the description lowercase, imperative, no period.
-
-### Branching
-
-- Branch naming: `feat/`, `fix/`, `chore/`, `test/`, `docs/` prefix + kebab-case description (e.g., `feat/add-custom-audiences`, `fix/org-id-validation`).
-- Never push directly to `main`. Always create a feature branch and open a pull request.
-
-### Rebasing
-
-- Always rebase onto `main` before pushing. No merge commits.
-- Use `--force-with-lease` (never `--force`) after rebasing.
-
-## CI/CD
-
-The project uses GitHub Actions with a single workflow (`.github/workflows/tflint.yml`):
-
-- **Triggers:** push to `main`, pull requests (opened/synchronize)
-- **Job:** `tflint` — runs TFLint on `ubuntu-latest` with plugin caching
-
-## Command Safety
-
-### Safe (run autonomously)
-
-- `make lint` — runs tflint, read-only analysis
-- `make tfsec` — runs tfsec, read-only security scan
-- `make generate-docs` — regenerates README.md (file change, but safe and expected)
-- `git status`, `git log`, `git diff`
-
-### Dangerous (ask user first)
-
-- `git push`
-- Any change to `versions.tf` provider constraints
-- Any change to `.github/workflows/`
-
-### Destructive (never run)
-
-- `rm -rf`
-- `git push --force`
-- `terraform destroy`
-- `terraform apply`
-
-## Important Rules
-
-- Never install tflint, tfsec, or terraform-docs locally — all tooling runs in Docker via `make`.
-- Run `make lint` before committing.
-- Run `make generate-docs` after any `.tf` file change to keep README.md in sync.
-- Always format Markdown files after creating or modifying them.
-- Update `CHANGELOG.md` under `## [Unreleased]` on every change.
-- Never edit content between `<!-- BEGIN_TF_DOCS -->` and `<!-- END_TF_DOCS -->` in README.md.
-- Keep `examples/test.tfvars` in sync with `variables.tf`.
-- Follow conventional commits.
-- Never push directly to `main`.
-- Read `spec/SPEC.md` before making design-level changes.
-- Update `spec/SPEC.md` when introducing new behavior or configuration.
