@@ -43,32 +43,3 @@ output "github_actions_variables" {
     (var.github_gcp_wif_workload_identity_provider_variable_name) = local.workload_identity_provider
   }
 }
-
-# Secret manager outputs
-output "secret_names" {
-  description = "Map of original secret names to their formatted names."
-  value       = local.formatted_secret_names
-}
-
-output "secret_gcp_project_id" {
-  description = "The GCP project ID where secrets are stored."
-  value       = local.secret_gcp_project_id
-}
-
-output "secret_created" {
-  description = "The names and IDs of the secrets created by this module."
-  value = {
-    for k, v in google_secret_manager_secret.secrets : k => {
-      name = v.name
-      id   = v.id
-    }
-  }
-}
-
-output "secret_ids" {
-  description = "Map of original secret names to their Secret Manager secret IDs."
-  value = {
-    for name, formatted_name in local.formatted_secret_names :
-    name => google_secret_manager_secret.secrets[name].id
-  }
-}

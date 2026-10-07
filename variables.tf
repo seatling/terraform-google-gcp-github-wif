@@ -1,6 +1,11 @@
 variable "name" {
   description = "The name to use for all resources created by this module."
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$", var.name))
+    error_message = "name must be 1-63 chars, lowercase letters/numbers/hyphens, and must not start or end with a hyphen."
+  }
 }
 
 # Google Cloud Platform (GCP) variables
@@ -9,10 +14,9 @@ variable "gcp_project_id" {
   type        = string
 }
 
-variable "gcp_existing_service_account_account_id" {
-  description = "The account_id of an existing service account to use for GitHub WIF. If not provided, a new service account will be created."
+variable "gcp_service_account_id" {
+  description = "The account ID, email, or unique ID of the target GCP service account to allow GitHub Actions to impersonate via Workload Identity."
   type        = string
-  default     = null
 }
 
 variable "gcp_workload_identity_pool_provider_attribute_mapping" {
@@ -36,9 +40,6 @@ variable "gcp_workload_identity_pool_provider_attribute_mapping" {
     "attribute.job_workflow_ref"      = "assertion.job_workflow_ref"
     "attribute.environment"           = "assertion.environment"
     "attribute.runner_environment"    = "assertion.runner_environment"
-    # GitHub Enterprise Cloud claims
-    "attribute.enterprise"    = "assertion.enterprise"
-    "attribute.enterprise_id" = "assertion.enterprise_id"
   }
 
   validation {
@@ -48,31 +49,28 @@ variable "gcp_workload_identity_pool_provider_attribute_mapping" {
 }
 
 # GitHub variables
-variable "github_enterprise_id" {
-  description = "The GitHub Enterprise ID to allow access from. Only available with GitHub Enterprise Cloud."
-  type        = string
-  default     = null
-}
-
-variable "github_organization_id" {
-  description = "The GitHub organization ID to allow access from. Use this for organization-level access."
-  type        = number
-  default     = null
-
-  validation {
-    condition     = var.github_organization_id == null ? true : var.github_organization_id > 0
-    error_message = "github_organization_id must be a valid positive GitHub organization ID or null."
-  }
-}
-
 variable "github_repository_names" {
-  description = "The GitHub repository names (in format 'owner/repo') to allow access from. Use this for repository-level access when you prefer to use repository names instead of IDs."
+  description = "The GitHub repository names (in format 'owner/repo') to allow access from."
   type        = list(string)
-  default     = []
 
   validation {
-    condition     = length(var.github_repository_names) == 0 || alltrue([for name in var.github_repository_names : can(regex("^[^/]+/[^/]+$", name))])
+    condition     = length(var.github_repository_names) > 0
+    error_message = "At least one repository must be specified in github_repository_names."
+  }
+
+  validation {
+    condition     = alltrue([for name in var.github_repository_names : can(regex("^[^/]+/[^/]+$", name))])
     error_message = "github_repository_names must be in the format 'owner/repo'."
+  }
+
+  validation {
+    condition     = length(distinct(var.github_repository_names)) == length(var.github_repository_names)
+    error_message = "github_repository_names must not contain duplicates."
+  }
+
+  validation {
+    condition     = length(distinct([for repo in var.github_repository_names : split("/", repo)[0]])) == 1
+    error_message = "All github_repository_names must belong to the same owner."
   }
 }
 
@@ -80,6 +78,11 @@ variable "github_token_issuer_url" {
   description = "The URL of the GitHub OIDC token issuer."
   type        = string
   default     = "https://token.actions.githubusercontent.com"
+
+  validation {
+    condition     = var.github_token_issuer_url == "https://token.actions.githubusercontent.com"
+    error_message = "github_token_issuer_url must be https://token.actions.githubusercontent.com. Enterprise issuers are no longer supported by this module."
+  }
 }
 
 variable "github_gcp_wif_project_id_variable_name" {
@@ -106,23 +109,6 @@ variable "github_create_oidc_variables" {
   default     = true
 }
 
-variable "github_organization_variables_visibility" {
-  description = "Visibility level for organization-level variables. Valid values: all, private, selected."
-  type        = string
-  default     = "all"
-
-  validation {
-    condition     = contains(["all", "private", "selected"], var.github_organization_variables_visibility)
-    error_message = "github_organization_variables_visibility must be one of: all, private, selected."
-  }
-}
-
-variable "github_organization_variables_selected_repository_ids" {
-  description = "List of repository IDs that can access organization-level variables. Only used when github_organization_variables_visibility is 'selected'."
-  type        = list(number)
-  default     = []
-}
-
 variable "github_variables_additional" {
   description = "Additional GitHub Actions variables to create. This should be a map where the key is the variable name and the value is the variable value."
   type        = map(string)
@@ -134,17 +120,9 @@ variable "github_attribute_condition_additional" {
   description = "Additional CEL expression to AND with the generated attribute condition. Use this to add extra restrictions like branch filters, environment filters, etc."
   type        = string
   default     = null
-}
 
-# Secret Manager variables
-variable "secret_gcp_project_id" {
-  description = "The GCP project ID where secrets will be created. If not provided, defaults to `var.gcp_project_id`."
-  type        = string
-  default     = null
-}
-
-variable "secret_names" {
-  description = "List of secret names to create and grant access to."
-  type        = list(string)
-  default     = []
+  validation {
+    condition     = var.github_attribute_condition_additional == null || trimspace(var.github_attribute_condition_additional) != ""
+    error_message = "github_attribute_condition_additional must be null or a non-empty CEL expression."
+  }
 }
