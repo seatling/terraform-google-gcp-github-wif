@@ -3,9 +3,7 @@ updates:
   - package-ecosystem: terraform
     assignees:
       - stfsy
-    directories:
-      - ./environments/*
-      - ./modules/*
+    directory: /
     schedule:
       interval: monthly
 
