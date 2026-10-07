@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: terraform
+    assignees:
+      - stfsy
+    directories:
+      - ./environments/*
+      - ./modules/*
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: github-actions
+    assignees:
+      - stfsy
+    directory: /
+    schedule:
+      interval: monthly

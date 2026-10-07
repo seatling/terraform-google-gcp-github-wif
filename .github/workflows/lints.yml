@@ -1,0 +1,58 @@
+name: lints
+
+on: [push]
+
+permissions: read-all
+
+jobs:
+  tflint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+        name: Checkout source code
+
+      - uses: actions/cache@v4
+        name: Cache plugin dir
+        with:
+          path: ~/.tflint.d/plugins
+          key: tflint-${{ hashFiles('.tflint.hcl') }}
+
+      - uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: latest
+
+      - name: Show version
+        run: tflint --version
+
+      - name: Init TFLint
+        run: tflint --init
+        env:
+          # https://github.com/terraform-linters/tflint/blob/master/docs/user-guide/plugins.md#avoiding-rate-limiting
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Run TFLint
+        run: tflint -f compact --recursive --config "$(pwd)/.tflint.hcl"
+
+  # tfsec:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     # Checkout Repository
+  #     - name: Check out Git Repository
+  #       uses: actions/checkout@v5
+
+  #     # Tfsec - Security scanner for your Terraform code
+  #     - name: Run Tfsec
+  #       uses: aquasecurity/tfsec-action@v1.0.3
+
+  checkov:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout Repository
+      - name: Check out Git Repository
+        uses: actions/checkout@v5
+
+      # Checkov - Prevent cloud misconfigurations and find vulnerabilities during build-time in infrastructure as code
+      - name: Run Checkov
+        run: |
+          docker run -t -v ${{ github.workspace }}:/tf --workdir /tf bridgecrew/checkov --directory /tf --skip-check CKV_TF_1 --quiet --compact
